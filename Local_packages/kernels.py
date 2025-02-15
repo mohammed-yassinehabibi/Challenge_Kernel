@@ -211,7 +211,7 @@ def compute_feature_vector(sequence, k, m, alphabet="ACGT", neighbor_cache=None)
     """
     if neighbor_cache is None:
         neighbor_cache = {}
-    kmer_counts = defaultdict(int)
+    kmer_counts = defaultdict(np.uint16)  # Use np.uint16 to save memory
     for i in range(len(sequence) - k + 1):
         kmer = sequence[i:i+k]
         key = (kmer, m)
@@ -285,6 +285,72 @@ def compute_mismatch_kernel(sequences, k=5, m=1, alphabet="ACGT"):
     K = X.dot(X.T).toarray()
     
     return normalize(K)
+
+def compute_mismatch_subkernel(sequences_left, sequences_right, k=5, m=1, alphabet="ACGT"):
+    """
+    Compute the mismatch kernel matrix for two lists of sequences.
+    Parallelizes the feature vector computation.
+
+    Parameters
+    ----------
+    sequences_left : list of str
+        Input sequences for rows.
+    sequences_right : list of str
+        Input sequences for columns.
+    k : int, optional
+        k-mer length (default 5).
+    m : int, optional
+        Maximum allowed mismatches (default 1).
+    alphabet : str, optional
+        The alphabet (default "ACGT").
+
+    Returns
+    -------
+    K_normalized : ndarray
+        The normalized kernel matrix.
+    """
+    n_left = len(sequences_left)
+    n_right = len(sequences_right)
+    neighbor_cache = {}
+    
+    feature_vectors_left = list(Parallel(n_jobs=-1)(
+        delayed(compute_feature_vector)(seq, k, m, alphabet, neighbor_cache)
+        for seq in tqdm(sequences_left, total=n_left, desc="Computing feature vectors (left)")
+    ))
+    
+    feature_vectors_right = list(Parallel(n_jobs=-1)(
+        delayed(compute_feature_vector)(seq, k, m, alphabet, neighbor_cache)
+        for seq in tqdm(sequences_right, total=n_right, desc="Computing feature vectors (right)")
+    ))
+    
+    all_kmers = set().union(*Parallel(n_jobs=-1)(
+        delayed(lambda fv: set(fv.keys()))(fv) 
+        for fv in tqdm(feature_vectors_left + feature_vectors_right, desc="Collecting k-mers")
+    ))
+    all_kmers = sorted(all_kmers)
+    kmer_index = {kmer: idx for idx, kmer in enumerate(all_kmers)}
+    
+    def build_sparse_matrix(feature_vectors, num_rows):
+        rows, cols, data = [], [], []
+        results = Parallel(n_jobs=-1)(
+            delayed(lambda i, fv: (
+                [i] * len(fv), 
+                [kmer_index[kmer] for kmer in fv.keys()], 
+                list(fv.values())
+            ))(i, fv) for i, fv in tqdm(enumerate(feature_vectors), total=num_rows, desc="Building sparse matrix entries")
+        )
+        for r, c, d in results:
+            rows.extend(r)
+            cols.extend(c)
+            data.extend(d)
+        return coo_matrix((data, (rows, cols)), shape=(num_rows, len(all_kmers)), dtype=np.float32).tocsr()
+    
+    X_left = build_sparse_matrix(feature_vectors_left, n_left)
+    X_right = build_sparse_matrix(feature_vectors_right, n_right)
+    
+    K = X_left.dot(X_right.T).toarray()
+    
+    return K
 
 def LA_unit(x, y, beta, d, e):
     def S(a, b):
@@ -405,5 +471,8 @@ def compute_kernel_matrix(X_left, X_right, kernel, **kwargs):
         return spectrum_kernel_matrix(X_left, X_right, **kwargs)
     elif kernel == 'mismatch':
         return compute_mismatch_kernel(X_left['seq'], **kwargs)
+    elif kernel == 'mis_sub':
+        return compute_mismatch_subkernel(X_left['seq'], X_right['seq'], **kwargs)
     elif kernel == 'LA':
         return LA_kernel_matrix(X_left, X_right, **kwargs)
+    
