@@ -2,6 +2,7 @@ import numpy as np
 import osqp
 from tqdm import tqdm
 from scipy.sparse import csc_matrix
+from scipy import optimize
 
 ##################################
 ### Kernel Logistic Regression ###

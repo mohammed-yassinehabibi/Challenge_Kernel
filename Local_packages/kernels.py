@@ -284,7 +284,7 @@ def compute_mismatch_kernel(sequences, k=5, m=1, alphabet="ACGT"):
     # Compute kernel matrix (dot product)
     K = X.dot(X.T).toarray()
     
-    return normalize(K)
+    return K
 
 def compute_mismatch_subkernel(sequences_left, sequences_right, k=5, m=1, alphabet="ACGT"):
     """
