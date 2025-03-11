@@ -1,5 +1,7 @@
 from Local_packages.optimizer import KLR_solver, SVM_solver
 import numpy as np
+from joblib import Parallel, delayed
+from tqdm import tqdm
 
 class KernelMethod():
     """
@@ -151,12 +153,13 @@ class KernelMethod():
             print(f"Lambda: {lambd}, Accuracy: {accuracy:.2f}")
         return best_lambda, round(best_accuracy, 4)*100
     
-    def validate(self, test_size=0.1, n_splits=10):
-        accuracies = []
-        for _ in range(n_splits):
+    def validate(self, test_size=0.1, n_splits=10, n_jobs=-1):
+        def single_split_evaluation(_):
             self.train_test_split(test_size=test_size)
             self.fit()
-            accuracies.append(self.evaluate()[1])
+            return self.evaluate()[1]
+
+        accuracies = Parallel(n_jobs=n_jobs)(delayed(single_split_evaluation)(i) for i in tqdm(range(n_splits)))
         average_accuracy = np.mean(accuracies)
         print(f'Average Accuracy: {average_accuracy}')
         min_accuracy = np.min(accuracies)
