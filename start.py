@@ -1,11 +1,7 @@
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
-import py_stringmatching as sm
-
-from Local_packages.kernels import compute_kernel_matrix, gaussian_kernel, normalize
 from Local_packages.run import KernelMethod
-from Local_packages.optimizer import KLR_solver, SVM_solver
+from Local_packages.optimizer import SVM_solver
 
 
 # Load the labels
@@ -26,8 +22,8 @@ for version in kernel_versions:
     K_2_dict[version] = np.load(f'features/K_2_mismatch_{version}.npy')
 
 ### DATASET 1 ###
-K_0_concat = np.stack([K_0_dict[version][:, :2000] for version in ['8-2', '9-2', '5-1']], axis=-1)
-K_0_norm = np.exp(-np.linalg.norm(K_0_concat, axis=-1))
+K_0_concat = np.stack([K_0_dict[version][:, :2000] for version in ['8-2', '9-2', '5-1']], axis=0)
+K_0_norm = np.exp(np.linalg.norm(K_0_concat, axis=0)-1)
 K_0 = K_0_norm+1
 
 lambd_0 = 1e-5

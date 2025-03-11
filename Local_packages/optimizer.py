@@ -214,3 +214,80 @@ def SVM_solver(K, Y, lambd, is_2_svm=False):
         solver.setup(P=K_sparse, q=-Y, A=csc_matrix(np.diag(Y)), l=np.zeros(n), u=np.ones(n) / (2 * n * lambd), verbose=False)
     results = solver.solve()
     return results.x
+
+import osqp
+import numpy as np
+from scipy.sparse import csc_matrix
+
+import osqp
+import numpy as np
+from scipy.sparse import csc_matrix, vstack, eye
+
+def SVM_solver_with_bias(K, Y, lambd):
+    """
+    Solves the standard SVM dual problem with a bias term computed via KKT conditions.
+    
+    Parameters
+    ----------
+    K : ndarray
+        Kernel matrix of shape (n_samples, n_samples).
+    Y : ndarray
+        Labels of shape (n_samples,). Expected to be -1 or +1.
+    C : float
+        Regularization parameter (box constraint).
+    
+    Returns
+    -------
+    alpha : ndarray
+        Dual variables of shape (n_samples,).
+    b : float
+        Bias term.
+    """
+    C = 1 / (2 * lambd)
+    n = K.shape[0]
+    
+    # Build the QP problem corresponding to:
+    #   min (1/2) * alpha^T (Y*Y^T ∘ K) alpha - 1^T alpha
+    # subject to 0 <= alpha_i <= C and sum_i alpha_i Y_i = 0.
+    Q = csc_matrix(np.outer(Y, Y) * K)
+    q = -np.ones(n)
+    
+    # To handle both the box constraints and the equality constraint,
+    # we create a constraint matrix A such that:
+    #   A = [ I ]
+    #       [ Y^T ]
+    # and set bounds for the first n rows (box constraints) and one equality row.
+    A_box = eye(n, format='csc')
+    A_eq = csc_matrix(Y.reshape(1, -1))
+    A = vstack([A_box, A_eq]).tocsc()
+    
+    # Lower and upper bounds:
+    # For the box constraints: 0 <= alpha_i <= C.
+    # For the equality constraint: sum_i alpha_i Y_i = 0.
+    l_box = np.zeros(n)
+    u_box = C * np.ones(n)
+    
+    l_eq = np.array([0.0])
+    u_eq = np.array([0.0])
+    
+    l = np.hstack([l_box, l_eq])
+    u = np.hstack([u_box, u_eq])
+    
+    # Setup and solve the quadratic program with OSQP
+    solver = osqp.OSQP()
+    solver.setup(P=Q, q=q, A=A, l=l, u=u, verbose=False)
+    results = solver.solve()
+    alpha = results.x
+    
+    # Compute bias b using the KKT conditions on the support vectors.
+    # We select support vectors with 0 < alpha < C (up to a tolerance)
+    tol = 1e-5
+    sv_idx = np.where((alpha > tol) & (alpha < C - tol))[0]
+    if len(sv_idx) > 0:
+        b = np.mean(Y[sv_idx] - (np.outer(alpha * Y, np.ones(n))[sv_idx] * K[sv_idx]).sum(axis=1))
+    else:
+        # Fallback: if no strict support vector, use all vectors with alpha > tol.
+        sv_idx = np.where(alpha > tol)[0]
+        b = np.mean(Y[sv_idx] - (np.outer(alpha * Y, np.ones(n))[sv_idx] * K[sv_idx]).sum(axis=1))
+    
+    return alpha, b
