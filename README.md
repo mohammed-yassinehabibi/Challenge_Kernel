@@ -6,16 +6,10 @@ You can find the Data Challenge Kernel Methods 2024-2025 for which this github h
 
 ## Kernels 
 
-- Kernel for Nucleotide sequences.
+- Kernel for Nucleotide sequences. Mainsly mismatch kernels but also Smith-Waterman kernel, substring kernel.
 
 ## Optimizers
 
 - Newton Method for Kernel Logistic Regression (KLR)
 
 - SVM with Kernel Trick
-
-# TODO
-
-- Adapt the gaussian kernel into an exponential kernel with optimal power p.
-
-- Implement Local Alignment Kernel (search if it is possible, currently too computationally costly & exploding values)
