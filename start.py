@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-from Local_packages.run import KernelMethod
-from Local_packages.optimizer import SVM_solver
+from Local_packages.run import KernelMethod, KernelMethodBias
+from Local_packages.optimizer import SVM_solver, SVM_solver_with_bias
 
 
 # Load the labels
@@ -22,36 +22,33 @@ for version in kernel_versions:
     K_2_dict[version] = np.load(f'features/K_2_mismatch_{version}.npy')
 
 ### DATASET 1 ###
-K_0_concat = np.stack([K_0_dict[version][:, :2000] for version in ['8-2', '9-2', '5-1']], axis=0)
-K_0_norm = np.exp(np.linalg.norm(K_0_concat, axis=0)-1)
-K_0 = K_0_norm+1
-
-lambd_0 = 1e-5
-method_0 = KernelMethod(K_0[:2000, :2000], Ytr0, lambd=lambd_0, solver=SVM_solver)
-method_0.train_test_split(test_size=0.1, random_state=42)
+K_0 = K_0_dict['10-2'][:,:2000]**1.4
+lambd_0 = 1e-2
+method_0 = KernelMethodBias(K_0[:2000], Ytr0, lambd=lambd_0, solver=SVM_solver_with_bias)
+method_0.train_test_split(test_size=0.001)
 method_0.fit()
 
 ### DATASET 2 ###
-K_1 = K_1_dict['9-2'][:,:2000]**2
-
-lambd_1 = 1e-4
-method_1 = KernelMethod((K_1+1)[:2000], Ytr1, lambd=lambd_1, solver=SVM_solver)
-method_1.train_test_split(test_size=0.1, random_state=10)
+K_1 = K_1_dict['10-2'][:,:2000]**1.5
+lambd_1 = 1e-2
+method_1 = KernelMethodBias(K_1[:2000], Ytr1, lambd=lambd_1, solver=SVM_solver_with_bias)
+method_1.train_test_split(test_size=0.001)
 method_1.fit()
 
 ### DATASET 3 ###
-K_2 = K_2_dict['9-1'][:,:2000]*K_2_dict['9-2'][:,:2000]**2+1
-
-lambd_2 = 2e-4
-method_2 = KernelMethod((K_2)[:2000, :2000], Ytr2, lambd=lambd_2, solver=SVM_solver)
-method_2.train_test_split(test_size=0.1, random_state=10)
+K_2 = K_2_dict['9-1'][:,:2000]**1.5
+lambd_2 = 1e-2
+method_2 = KernelMethodBias(K_2[:2000], Ytr2, lambd=lambd_2, solver=SVM_solver_with_bias)
+method_2.train_test_split(test_size=0.001)
 method_2.fit()
 
 ### Predictions ###
 def predict_test_labels(K, method):
     K_te = K
     alpha = method.alpha
-    Yte0 = np.sign(K_te @ alpha)
+    b = method.b
+    # Predictions
+    Yte0 = np.sign(np.dot(K_te, alpha * method.Y[method.train_indices]) + b)
     return Yte0
 
 Yte0 = predict_test_labels(K_0[2000:][:, method_0.train_indices], method_0)
